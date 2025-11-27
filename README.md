@@ -38,6 +38,12 @@ tag "name" {
 tag "name2" {}
 ```
 
+## Schema Definition
+
+- `block_header` is equivalent of `hcl.BlockHeaderSchema`
+- `attribute` is equivalent of `hcl.AttributeSchema`
+- `body` is equvalent of `hcl.BodySchema`
+
 ### VSCode Extensions
 
 Get the VSCode Extension at [marketplace.visualstudio.com/items?itemName=avestura.hcl-schema](https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema)

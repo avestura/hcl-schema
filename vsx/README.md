@@ -42,6 +42,12 @@ tag "name" {
 tag "name2" {}
 ```
 
+## Schema Definition
+
+- `block_header` is equivalent of `hcl.BlockHeaderSchema`
+- `attribute` is equivalent of `hcl.AttributeSchema`
+- `body` is equvalent of `hcl.BodySchema`
+
 ## Requirements
 
 This extension depends on the [HashiCorp's HCL Extension](https://marketplace.visualstudio.com/items?itemName=HashiCorp.HCL)

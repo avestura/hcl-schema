@@ -2,10 +2,6 @@
 
 Create HCL Schemas using HCL files
 
-## Root Schema
-
-The [root HCL schema ](./schema/draft/2025-10/.schema.hcl) defines the schema itself (its own body).
-
 ## Defining Schemas
 
 You can define an schema by creating a `*.schema.hcl`:
@@ -44,4 +40,8 @@ tag "name2" {}
 
 ### VSCode Extensions
 
-To be announced
+Get the VSCode Extension at [marketplace.visualstudio.com/items?itemName=avestura.hcl-schema](https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema)
+
+## Root Schema
+
+The [root HCL schema ](./schema/draft/2025-10/.schema.hcl) defines the schema itself (its own body).

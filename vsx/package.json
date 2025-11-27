@@ -57,6 +57,7 @@
       }
     }
   },
+  "license": "MIT",
   "scripts": {
     "vscode:prepublish": "yarn run build:go-cli && yarn run compile",
     "compile": "tsc -p ./",

@@ -1,6 +1,9 @@
 package hclschema
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -239,5 +242,42 @@ func TestMultipleBlockInstancesAllowed(t *testing.T) {
 	diags := ValidateHCLWithLinkedSchema(hclPath)
 	if diags.HasErrors() {
 		t.Fatalf("expected no diagnostics for multiple allowed block instances, got: %v", diags)
+	}
+}
+
+func TestFetchRemoteSchemaHTTPS(t *testing.T) {
+	schemaPath := filepath.Join("..", "..", "schema", "draft", "2025-10", ".schema.hcl")
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatalf("failed to read local schema fixture: %v", err)
+	}
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write(data)
+	}))
+	defer srv.Close()
+
+	oldClient := httpClient
+	httpClient = srv.Client()
+	defer func() { httpClient = oldClient }()
+
+	url := srv.URL + "/.schema.hcl"
+
+	local, diags := fetchRemoteSchema(url)
+	if diags.HasErrors() {
+		t.Fatalf("fetchRemoteSchema returned diagnostics: %v", diags)
+	}
+	if local == "" {
+		t.Fatalf("expected a local cached path, got empty string")
+	}
+	if _, err := os.Stat(local); err != nil {
+		t.Fatalf("expected cached file to exist at %s: %v", local, err)
+	}
+
+	parser := hclparse.NewParser()
+	_, pd := parser.ParseHCLFile(local)
+	if pd.HasErrors() {
+		t.Fatalf("failed to parse cached remote schema: %v", pd)
 	}
 }

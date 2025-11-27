@@ -17,6 +17,8 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+var httpClient = http.DefaultClient
+
 const SchemaExtension = ".schema.hcl"
 
 type BlockHeaderAndBodySchema struct {
@@ -308,7 +310,7 @@ func fetchRemoteSchema(url string) (string, hcl.Diagnostics) {
 		diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to create request", Detail: err.Error()})
 		return "", diags
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to download schema", Detail: err.Error()})
 		return "", diags

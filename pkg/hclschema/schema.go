@@ -1,9 +1,15 @@
 package hclschema
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	godschema "github.com/avestura/hcl-schema/pkg/hclschema/god_schema"
 	"github.com/hashicorp/hcl/v2"
@@ -256,13 +262,113 @@ func ValidateHCLWithLinkedSchema(hclPath string) hcl.Diagnostics {
 		return allDiags
 	}
 
-	if !strings.HasPrefix(schemaRef, "http://") && !strings.HasPrefix(schemaRef, "https://") && !filepath.IsAbs(schemaRef) {
+	if strings.HasPrefix(schemaRef, "http://") || strings.HasPrefix(schemaRef, "https://") {
+		local, d := fetchRemoteSchema(schemaRef)
+		allDiags = append(allDiags, d...)
+		if d.HasErrors() || local == "" {
+			return allDiags
+		}
+		schemaRef = local
+	} else if !filepath.IsAbs(schemaRef) {
 		schemaRef = filepath.Join(filepath.Dir(hclPath), schemaRef)
 	}
 
 	resDiags := ValidateFileWithSchema(schemaRef, hclPath)
 	allDiags = append(allDiags, resDiags...)
 	return allDiags
+}
+
+func fetchRemoteSchema(url string) (string, hcl.Diagnostics) {
+	var diags hcl.Diagnostics
+	if !strings.HasPrefix(url, "https://") {
+		diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "insecure schema URL", Detail: "only https:// URLs are allowed for remote schemas"})
+		return "", diags
+	}
+
+	cacheDir := filepath.Join(os.TempDir(), "hclschema-cache")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to create cache dir", Detail: err.Error()})
+		return "", diags
+	}
+
+	h := sha256.Sum256([]byte(url))
+	fname := hex.EncodeToString(h[:]) + ".schema.hcl"
+	full := filepath.Join(cacheDir, fname)
+
+	if fi, err := os.Stat(full); err == nil {
+		if time.Since(fi.ModTime()) < 24*time.Hour {
+			return full, diags
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to create request", Detail: err.Error()})
+		return "", diags
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to download schema", Detail: err.Error()})
+		return "", diags
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to download schema", Detail: resp.Status})
+		return "", diags
+	}
+
+	const maxSize = 1 << 20
+	r := io.LimitReader(resp.Body, maxSize+1)
+	f, err := os.CreateTemp(cacheDir, "tmp-*.schema.hcl")
+	if err != nil {
+		diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to create temp file", Detail: err.Error()})
+		return "", diags
+	}
+	defer func() {
+		f.Close()
+	}()
+	n, err := io.Copy(f, r)
+	if err != nil {
+		diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to read schema body", Detail: err.Error()})
+		os.Remove(f.Name())
+		return "", diags
+	}
+	if n > maxSize {
+		diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "schema too large", Detail: "remote schema exceeds maximum allowed size"})
+		os.Remove(f.Name())
+		return "", diags
+	}
+
+	if err := os.Rename(f.Name(), full); err != nil {
+		if err2 := copyFile(f.Name(), full); err2 != nil {
+			diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to cache schema", Detail: err2.Error()})
+			os.Remove(f.Name())
+			return "", diags
+		}
+		os.Remove(f.Name())
+	}
+
+	return full, diags
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
 }
 
 func extractSchemaRefFromText(s string) (string, bool) {

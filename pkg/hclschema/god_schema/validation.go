@@ -1,8 +1,6 @@
 package godschema
 
 import (
-	"log"
-
 	"github.com/hashicorp/hcl/v2"
 )
 
@@ -46,8 +44,5 @@ func ValidateSchema(file *hcl.File) hcl.Diagnostics {
 	ctx := &hcl.EvalContext{}
 
 	diags := ValidateBody(file.Body, rootSchema, ctx)
-	if diags.HasErrors() {
-		log.Fatal(diags)
-	}
 	return diags
 }

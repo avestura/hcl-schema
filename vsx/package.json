@@ -1,0 +1,57 @@
+{
+  "name": "hcl-schema",
+  "publisher": "avestura",
+  "displayName": "hcl-schema",
+  "description": "Support for .schema.hcl files",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.106.1"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionDependencies": [
+    "hashicorp.hcl"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "hcl-schema.validateActive",
+        "title": "Validate active HCL file"
+      }
+    ]
+    ,
+    "configuration": {
+      "type": "object",
+      "title": "HCL Schema",
+      "properties": {
+        "hclSchema.cliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the hclschema CLI binary. If empty the extension will use `go run ./cmd/hclschema-cli` in development."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "yarn run build:go-cli && yarn run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build:go-cli": "node ./scripts/build-go-cli.js",
+    "pretest": "yarn run compile && yarn run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.106.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.46.3",
+    "eslint": "^9.39.1",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}

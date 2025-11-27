@@ -133,6 +133,14 @@ func TestDetectAndValidate_NestedLinked(t *testing.T) {
 	}
 }
 
+func TestDetectAndValidate_NestedLinked_WithExcessAttr(t *testing.T) {
+	hclPath := filepath.Join("testdata", "nested_linked_with_excess_attr.hcl")
+	diags := ValidateHCLWithLinkedSchema(hclPath)
+	if !diags.HasErrors() {
+		t.Fatalf("expected diagnostics for excess attribute, got none")
+	}
+}
+
 func TestParseNestedSchema(t *testing.T) {
 	path := filepath.Join("testdata", "nested.schema.hcl")
 	res, diags := ParseSchemaFile(path)
@@ -177,5 +185,59 @@ func TestParseNestedSchema(t *testing.T) {
 	}
 	if !foundInner {
 		t.Fatalf("inner block not found inside outer")
+	}
+}
+
+func TestDuplicateBlockTypesDifferentLevels(t *testing.T) {
+	path := filepath.Join("testdata", "duplicate_levels.schema.hcl")
+	res, diags := ParseSchemaFile(path)
+	if diags.HasErrors() {
+		t.Fatalf("expected no errors parsing nested duplicate block types: %v", diags)
+	}
+	if res == nil || res.BodySchema == nil {
+		t.Fatalf("expected non-nil resulting body schema")
+	}
+}
+
+func TestDuplicateBlockTypesSameLevel(t *testing.T) {
+	path := filepath.Join("testdata", "duplicate_same_level.schema.hcl")
+	res, diags := ParseSchemaFile(path)
+	if diags.HasErrors() {
+		t.Fatalf("expected no errors parsing schema with same-level duplicate block headers: %v", diags)
+	}
+	if res == nil || res.BodySchema == nil {
+		t.Fatalf("expected non-nil resulting body schema")
+	}
+}
+
+func TestDuplicateAttributeInInstance(t *testing.T) {
+	hclPath := filepath.Join("testdata", "duplicate_attr.hcl")
+	diags := ValidateHCLWithLinkedSchema(hclPath)
+	if !diags.HasErrors() {
+		t.Fatalf("expected diagnostics for duplicate attribute in HCL instance, got none")
+	}
+}
+
+func TestLabelCountMismatch(t *testing.T) {
+	hclPath := filepath.Join("testdata", "label_count_mismatch.hcl")
+	diags := ValidateHCLWithLinkedSchema(hclPath)
+	if !diags.HasErrors() {
+		t.Fatalf("expected diagnostics for label count mismatch, got none")
+	}
+}
+
+func TestMissingRequiredAttribute(t *testing.T) {
+	hclPath := filepath.Join("testdata", "missing_required_attr.hcl")
+	diags := ValidateHCLWithLinkedSchema(hclPath)
+	if !diags.HasErrors() {
+		t.Fatalf("expected diagnostics for missing required attribute, got none")
+	}
+}
+
+func TestMultipleBlockInstancesAllowed(t *testing.T) {
+	hclPath := filepath.Join("testdata", "multiple_tags.hcl")
+	diags := ValidateHCLWithLinkedSchema(hclPath)
+	if diags.HasErrors() {
+		t.Fatalf("expected no diagnostics for multiple allowed block instances, got: %v", diags)
 	}
 }

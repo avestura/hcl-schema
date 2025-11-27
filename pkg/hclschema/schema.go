@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	godschema "github.com/avestura/hcl-schema/pkg/hclschema/god_schema"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/zclconf/go-cty/cty"
@@ -43,13 +44,6 @@ func ParseSchema(filename string) error {
 	return nil
 }
 
-func GetTopLevelDefaultAttributes() []hcl.AttributeSchema {
-	return []hcl.AttributeSchema{
-		{Name: "schema"},
-		{Name: "id"},
-	}
-}
-
 func GetInnerDefaultBlocks() []hcl.BlockHeaderSchema {
 	return []hcl.BlockHeaderSchema{
 		{Type: "attribute", LabelNames: []string{"attribute_name"}},
@@ -64,10 +58,7 @@ func ParseSchemaFile(filename string) (*BlockHeaderAndBodySchema, hcl.Diagnostic
 	if diags.HasErrors() {
 		return nil, diags
 	}
-	defaultSchema := &hcl.BodySchema{
-		Attributes: GetTopLevelDefaultAttributes(),
-		Blocks:     GetInnerDefaultBlocks(),
-	}
+	defaultSchema := godschema.GetRootSchema()
 
 	fbs, d := parseBody(file.Body, defaultSchema)
 	diags = append(diags, d...)
@@ -87,11 +78,10 @@ func parseBody(body hcl.Body, schema *hcl.BodySchema) (*FullBodySchema, hcl.Diag
 	fbs := &FullBodySchema{}
 	attrs := make([]hcl.AttributeSchema, 0)
 	blocks := make([]BlockHeaderAndBodySchema, 0)
+
 	ctx := &hcl.EvalContext{}
 
-	innerDefault := &hcl.BodySchema{
-		Blocks: GetInnerDefaultBlocks(),
-	}
+	innerDefault := godschema.GetBodySchema()
 
 	for _, block := range content.Blocks {
 		switch block.Type {
@@ -100,6 +90,7 @@ func parseBody(body hcl.Body, schema *hcl.BodySchema) (*FullBodySchema, hcl.Diag
 			if len(block.Labels) > 0 {
 				name = block.Labels[0]
 			}
+
 			innerSchema := &hcl.BodySchema{Attributes: []hcl.AttributeSchema{{Name: "required"}}}
 			innerContent, d := block.Body.Content(innerSchema)
 			diags = append(diags, d...)
@@ -120,6 +111,7 @@ func parseBody(body hcl.Body, schema *hcl.BodySchema) (*FullBodySchema, hcl.Diag
 			if len(block.Labels) > 0 {
 				typ = block.Labels[0]
 			}
+
 			innerSchema := &hcl.BodySchema{
 				Attributes: []hcl.AttributeSchema{{Name: "label_names"}},
 				Blocks:     []hcl.BlockHeaderSchema{{Type: "body"}},
@@ -188,11 +180,49 @@ func ValidateFileWithSchema(schemaPath, hclPath string) hcl.Diagnostics {
 		return allDiags
 	}
 
-	bodySchema := schemaRes.BodySchema.AsBodySchema()
+	findBlockDef := func(fbs *FullBodySchema, blk *hcl.Block) *BlockHeaderAndBodySchema {
+		if fbs == nil {
+			return nil
+		}
 
-	allowedSchema := *bodySchema
-	allowedSchema.Attributes = append(allowedSchema.Attributes, hcl.AttributeSchema{Name: "__schema"})
-	_, d = file.Body.Content(&allowedSchema)
+		for i := range fbs.Blocks {
+			cand := &fbs.Blocks[i]
+			if cand.Type != blk.Type {
+				continue
+			}
+			if len(cand.LabelNames) == len(blk.Labels) {
+				return cand
+			}
+		}
+		return nil
+	}
+
+	var validate func(b hcl.Body, fbs *FullBodySchema, allowSchemaAttr bool) hcl.Diagnostics
+	validate = func(b hcl.Body, fbs *FullBodySchema, allowSchemaAttr bool) hcl.Diagnostics {
+		var res hcl.Diagnostics
+		var bs *hcl.BodySchema
+		if fbs == nil {
+			bs = &hcl.BodySchema{}
+		} else {
+			bs = fbs.AsBodySchema()
+		}
+		if allowSchemaAttr {
+			bs.Attributes = append(bs.Attributes, hcl.AttributeSchema{Name: "__schema"})
+		}
+
+		content, d := b.Content(bs)
+		res = append(res, d...)
+
+		for _, blk := range content.Blocks {
+			def := findBlockDef(fbs, blk)
+			if def != nil && def.BodySchema != nil {
+				res = append(res, validate(blk.Body, def.BodySchema, false)...)
+			}
+		}
+		return res
+	}
+
+	d = validate(file.Body, schemaRes.BodySchema, true)
 	allDiags = append(allDiags, d...)
 	return allDiags
 }

@@ -5,8 +5,8 @@ import "github.com/hashicorp/hcl/v2"
 func GetRootSchema() *hcl.BodySchema {
 	return &hcl.BodySchema{
 		Attributes: []hcl.AttributeSchema{
-			{Name: "schema", Required: true},
-			{Name: "id", Required: true},
+			{Name: "__schema", Required: true},
+			{Name: "__id", Required: true},
 		},
 		Blocks: []hcl.BlockHeaderSchema{
 			{Type: "body"},

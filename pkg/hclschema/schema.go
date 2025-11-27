@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -68,7 +69,8 @@ func ParseSchemaFile(filename string) (*BlockHeaderAndBodySchema, hcl.Diagnostic
 	}
 	defaultSchema := godschema.GetRootSchema()
 
-	fbs, d := parseBody(file.Body, defaultSchema)
+	idMap := make(map[string]*FullBodySchema)
+	fbs, d := parseBody(file.Body, defaultSchema, idMap)
 	diags = append(diags, d...)
 	if diags.HasErrors() {
 		return nil, diags
@@ -77,7 +79,7 @@ func ParseSchemaFile(filename string) (*BlockHeaderAndBodySchema, hcl.Diagnostic
 	return &BlockHeaderAndBodySchema{BodySchema: fbs}, diags
 }
 
-func parseBody(body hcl.Body, schema *hcl.BodySchema) (*FullBodySchema, hcl.Diagnostics) {
+func parseBody(body hcl.Body, schema *hcl.BodySchema, idMap map[string]*FullBodySchema) (*FullBodySchema, hcl.Diagnostics) {
 	content, diags := body.Content(schema)
 	if diags.HasErrors() {
 		return nil, diags
@@ -107,7 +109,7 @@ func parseBody(body hcl.Body, schema *hcl.BodySchema) (*FullBodySchema, hcl.Diag
 			if a, ok := innerContent.Attributes["required"]; ok {
 				val, err := a.Expr.Value(ctx)
 				if err != nil {
-					diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to evaluate attribute 'required'", Detail: err.Error()})
+					diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to evaluate attribute 'required'", Detail: err.Error(), Subject: &a.Range})
 				} else if val.Type() == cty.Bool {
 					required = val.True()
 				}
@@ -128,7 +130,7 @@ func parseBody(body hcl.Body, schema *hcl.BodySchema) (*FullBodySchema, hcl.Diag
 			if a, ok := innerContent.Attributes["label_names"]; ok {
 				val, err := a.Expr.Value(ctx)
 				if err != nil {
-					diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to evaluate 'label_names'", Detail: err.Error()})
+					diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to evaluate 'label_names'", Detail: err.Error(), Subject: &a.Range})
 				} else if val.CanIterateElements() {
 					it := val.ElementIterator()
 					for it.Next() {
@@ -140,12 +142,54 @@ func parseBody(body hcl.Body, schema *hcl.BodySchema) (*FullBodySchema, hcl.Diag
 				}
 			}
 
+			var placeholder *FullBodySchema
+			if a, ok := innerContent.Attributes["id"]; ok {
+				txt, terr := extractExprSource(a.Expr)
+				if terr != nil {
+					diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to read 'id' attribute source", Detail: terr.Error()})
+				} else {
+					idVal := strings.Trim(txt, " \t\n\r\"'")
+					if idVal != "" {
+						key := fmt.Sprintf("%s.%s", block.Type, idVal)
+						placeholder = &FullBodySchema{}
+						idMap[key] = placeholder
+					}
+				}
+			}
+
 			var nested *FullBodySchema
 			for _, inner := range innerContent.Blocks {
 				if inner.Type == "body" {
-					nb, d := parseBody(inner.Body, innerDefault)
+					nb, d := parseBody(inner.Body, innerDefault, idMap)
 					diags = append(diags, d...)
-					nested = nb
+					if placeholder != nil {
+						placeholder.Attributes = nb.Attributes
+						placeholder.Blocks = nb.Blocks
+						nested = placeholder
+					} else {
+						nested = nb
+					}
+				}
+			}
+
+			if a, ok := innerContent.Attributes["ref"]; ok {
+				txt, terr := extractExprSource(a.Expr)
+				if terr != nil {
+					diags = append(diags, &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "failed to read 'ref' attribute source", Detail: terr.Error()})
+				} else {
+					refKey := strings.Trim(txt, " \t\n\r\"'")
+					if refKey != "" {
+						if resolved, ok := idMap[refKey]; ok {
+							nested = resolved
+						} else {
+							diags = append(diags, &hcl.Diagnostic{
+								Severity: hcl.DiagError,
+								Summary:  "unresolved ref",
+								Detail:   fmt.Sprintf("ref '%s' not found", refKey),
+								Subject:  &a.Range,
+							})
+						}
+					}
 				}
 			}
 
@@ -153,7 +197,7 @@ func parseBody(body hcl.Body, schema *hcl.BodySchema) (*FullBodySchema, hcl.Diag
 			blocks = append(blocks, BlockHeaderAndBodySchema{BlockHeaderSchema: bhs, BodySchema: nested})
 
 		case "body":
-			nb, d := parseBody(block.Body, innerDefault)
+			nb, d := parseBody(block.Body, innerDefault, idMap)
 			diags = append(diags, d...)
 			if nb != nil {
 				attrs = append(attrs, nb.Attributes...)
@@ -175,6 +219,12 @@ func ValidateFileWithSchema(schemaPath, hclPath string) hcl.Diagnostics {
 	schemaRes, diags := ParseSchemaFile(schemaPath)
 	allDiags = append(allDiags, diags...)
 	if schemaRes == nil || schemaRes.BodySchema == nil {
+		return allDiags
+	}
+
+	if strings.HasSuffix(hclPath, SchemaExtension) {
+		_, diags := ParseSchemaFile(hclPath)
+		allDiags = append(allDiags, diags...)
 		return allDiags
 	}
 
@@ -368,6 +418,23 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Sync()
+}
+
+func extractExprSource(expr hcl.Expression) (string, error) {
+	r := expr.Range()
+	if r.Filename == "" {
+		return "", fmt.Errorf("expression has no filename range")
+	}
+	data, err := os.ReadFile(r.Filename)
+	if err != nil {
+		return "", err
+	}
+	start := max(int(r.Start.Byte)-1, 0)
+	end := min(int(r.End.Byte), len(data))
+	if start >= end {
+		return "", fmt.Errorf("invalid expression range")
+	}
+	return string(data[start:end]), nil
 }
 
 func extractSchemaRefFromText(s string) (string, bool) {

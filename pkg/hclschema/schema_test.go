@@ -281,3 +281,62 @@ func TestFetchRemoteSchemaHTTPS(t *testing.T) {
 		t.Fatalf("failed to parse cached remote schema: %v", pd)
 	}
 }
+
+func TestParseGodSchema_NoDiagnostics(t *testing.T) {
+	path := filepath.Join("..", "..", "schema", "draft", "2025-10", ".schema.hcl")
+	res, diags := ParseSchemaFile(path)
+	if diags.HasErrors() {
+		t.Fatalf("ParseSchemaFile returned diagnostics: %v", diags)
+	}
+	if res == nil || res.BodySchema == nil {
+		t.Fatalf("expected non-nil resulting body schema")
+	}
+}
+
+func TestParseGodSchema_RefResolution(t *testing.T) {
+	path := filepath.Join("..", "..", "schema", "draft", "2025-10", ".schema.hcl")
+	res, diags := ParseSchemaFile(path)
+	if diags.HasErrors() {
+		t.Fatalf("ParseSchemaFile returned diagnostics: %v", diags)
+	}
+	if res == nil || res.BodySchema == nil {
+		t.Fatalf("expected non-nil resulting body schema")
+	}
+
+	counts := make(map[*FullBodySchema]int)
+	visited := make(map[*FullBodySchema]bool)
+	var walk func(fbs *FullBodySchema)
+	walk = func(fbs *FullBodySchema) {
+		if fbs == nil {
+			return
+		}
+		counts[fbs]++
+		if visited[fbs] {
+			return
+		}
+		visited[fbs] = true
+		for i := range fbs.Blocks {
+			walk(fbs.Blocks[i].BodySchema)
+		}
+	}
+	walk(res.BodySchema)
+
+	foundReuse := false
+	for _, c := range counts {
+		if c > 1 {
+			foundReuse = true
+			break
+		}
+	}
+	if !foundReuse {
+		t.Fatalf("expected at least one FullBodySchema pointer to be reused via ref, but none were")
+	}
+}
+
+func TestParseNormalSchema_RefResolution(t *testing.T) {
+	path := filepath.Join("testdata", "ref_id_body_fail.schema.hcl")
+	_, diags := ParseSchemaFile(path)
+	if !diags.HasErrors() {
+		t.Fatalf("ParseSchemaFile must fail: %v", diags)
+	}
+}

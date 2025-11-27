@@ -1,9 +1,9 @@
-__schema = "https://raw.githubusercontent.com/avestura/hcl-schema/refs/heads/master/schema/draft/2025-10/.schema.hcl"
-__id     = "https://raw.githubusercontent.com/avestura/hcl-schema/refs/heads/master/schema/draft/2025-10/.schema.hcl"
+__schema = "https://raw.githubusercontent.com/avestura/hcl-schema/refs/heads/main/schema/draft/2025-10/.schema.hcl"
+__id     = "https://raw.githubusercontent.com/avestura/hcl-schema/refs/heads/main/schema/draft/2025-10/.schema.hcl"
 
 body {
-    attribute "schema" {}
-    attribute "id" {}
+    attribute "__schema" {}
+    attribute "__id" {}
     block_header "body" {
         id = "bodyRef"
         body {

@@ -13,7 +13,10 @@
   "extensionDependencies": [
     "hashicorp.hcl"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:hcl"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [

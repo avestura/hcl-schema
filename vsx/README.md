@@ -1,71 +1,51 @@
-# hcl-schema README
+# HCL Schema
 
-This is the README for your extension "hcl-schema". After writing up a brief description, we recommend including the following sections.
+Create HCL Schemas using HCL files
 
-## Features
+## Root Schema
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+The [root HCL schema ](./schema/draft/2025-10/.schema.hcl) defines the schema itself (its own body).
 
-For example if there is an image subfolder under your extension project workspace:
+## Defining Schemas
 
-\!\[feature X\]\(images/feature-x.png\)
+You can define an schema by creating a `*.schema.hcl`:
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+**example.schema.hcl**:
+
+```hcl
+__schema = "https://raw.githubusercontent.com/avestura/hcl-schema/refs/heads/main/schema/draft/2025-10/.schema.hcl"
+__id     = "https://raw.githubusercontent.com/avestura/hcl-schema/refs/heads/main/example.schema.hcl"
+
+body {
+    attribute "myattr" {
+        required = true
+    }
+
+    block_header "tag" {
+        label_names = ["name1"]
+
+        body { 
+            attribute "x" {}
+        }
+    }
+}
+```
+Which parses and accepts HCL files like this:
+
+```hcl
+// Defines an HCL file like this:
+
+myattr = "x"
+tag "name" {
+    x = 2
+}
+tag "name2" {}
+```
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+This extension depends on the [HashiCorp's HCL Extension](https://marketplace.visualstudio.com/items?itemName=HashiCorp.HCL)
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+* `hclSchema.cliPath`: If you don't want to use the built-in cli for checking the schema file, you can configure the binary path.

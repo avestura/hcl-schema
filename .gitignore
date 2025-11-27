@@ -178,3 +178,4 @@ vite.config.ts.timestamp-*
 /vsx/out/
 /vsx/node_modules/
 /vsx/.vscode-test/
+vsx/hcl-schema-*.vsix

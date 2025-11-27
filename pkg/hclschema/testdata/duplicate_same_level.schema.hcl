@@ -5,7 +5,7 @@ body {
     block_header "foo" {
         label_names = ["o"]
     }
-
+    
     block_header "foo" {
         label_names = ["o2"]
     }

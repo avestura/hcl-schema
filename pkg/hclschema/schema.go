@@ -120,10 +120,7 @@ func parseBody(body hcl.Body, schema *hcl.BodySchema) (*FullBodySchema, hcl.Diag
 				typ = block.Labels[0]
 			}
 
-			innerSchema := &hcl.BodySchema{
-				Attributes: []hcl.AttributeSchema{{Name: "label_names"}},
-				Blocks:     []hcl.BlockHeaderSchema{{Type: "body"}},
-			}
+			innerSchema := godschema.GetBlockHeaderSchema()
 			innerContent, d := block.Body.Content(innerSchema)
 			diags = append(diags, d...)
 

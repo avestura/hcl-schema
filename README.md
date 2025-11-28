@@ -48,6 +48,8 @@ tag "name2" {}
 
 Get the VSCode Extension at [marketplace.visualstudio.com/items?itemName=avestura.hcl-schema](https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema)
 
+![VSCode Screenshot](./vsx/assets/screenshot/vscode-scrshot.png)
+
 ## Root Schema
 
 The [root HCL schema ](./schema/draft/2025-10/.schema.hcl) defines the schema itself (its own body).

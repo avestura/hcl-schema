@@ -1,6 +1,12 @@
 # HCL Schema
 
-Create HCL Schemas using HCL files
+Create HCL Schemas using HCL files.
+
+This repository includes:
+
+- **Go library** for validating HCL files according to their `*.schema.hcl` schemas.
+- **Go CLI** for verifying HCL files via command-line.
+- **VSCode Extension** for verifying HCL files inside the editor.
 
 ## Defining Schemas
 

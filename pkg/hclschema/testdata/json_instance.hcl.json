@@ -1,0 +1,5 @@
+{
+  "__schema": "typed.schema.hcl",
+  "name": "web",
+  "port": 443
+}

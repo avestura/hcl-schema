@@ -1,108 +1,79 @@
+// Command hclschema-cli validates HCL files against `*.schema.hcl` schemas.
 package main
 
 import (
-	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
-
-	"github.com/avestura/hcl-schema/pkg/hclschema"
-	"github.com/hashicorp/hcl/v2"
 )
 
-type OutDiagnostic struct {
-	File      string `json:"file"`
-	StartLine int    `json:"startLine"`
-	StartCol  int    `json:"startCol"`
-	EndLine   int    `json:"endLine"`
-	EndCol    int    `json:"endCol"`
-	Severity  string `json:"severity"`
-	Message   string `json:"message"`
-}
+// Version is stamped at build time with -ldflags "-X main.Version=...".
+var Version = "dev"
 
-func diagSeverity(d *hcl.Diagnostic) string {
-	switch d.Severity {
-	case hcl.DiagError:
-		return "error"
-	case hcl.DiagWarning:
-		return "warning"
-	default:
-		return "info"
-	}
-}
+const usage = `hclschema - schema validation for HCL
+
+Usage:
+  hclschema <command> [flags] [files...]
+
+Commands:
+  validate    Check HCL files against their schemas
+  fmt         Rewrite schema documents in canonical form
+  infer       Derive a starting schema from existing HCL files
+  docs        Render Markdown reference documentation for a schema
+  bundle      Inline a schema's imports into one self-contained document
+  lsp         Run the language server over stdin/stdout
+  version     Print the version
+
+Run "hclschema <command> -h" for the flags of a command.
+
+Legacy invocation:
+  hclschema --detect <file.hcl>
+  hclschema --detect=false <file.hcl> <file.schema.hcl>
+
+  Prints JSON diagnostics and always exits 0. Kept for the editor extension
+  that shipped against it; new callers should use "validate".
+`
+
+// Exit codes. Separating "found problems" from "could not run" is what lets
+// a CI job tell a failing check apart from a broken invocation.
+const (
+	exitOK       = 0
+	exitFindings = 1
+	exitUsage    = 2
+)
 
 func main() {
-	var detect bool
-	flag.BoolVar(&detect, "detect", true, "Detect schema via __schema attribute and validate")
-	flag.Parse()
-
-	args := flag.Args()
+	args := os.Args[1:]
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: hclschema-cli <hcl-file>")
-		os.Exit(2)
-	}
-	hclPath := args[0]
-
-	var diags hcl.Diagnostics
-	if detect {
-		diags = hclschema.ValidateHCLWithLinkedSchema(hclPath)
-	} else {
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: hclschema-cli <hcl-file> <schema-file>")
-			os.Exit(2)
-		}
-		schema := args[1]
-		diags = hclschema.ValidateFileWithSchema(schema, hclPath)
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(exitUsage)
 	}
 
-	out := make([]OutDiagnostic, 0, len(diags))
-	for _, d := range diags {
-		if d == nil {
-			continue
-		}
-		startLine, startCol, endLine, endCol := 0, 0, 0, 0
-		if d.Subject != nil {
-			startLine = d.Subject.Start.Line - 1
-			startCol = d.Subject.Start.Column - 1
-			endLine = d.Subject.End.Line - 1
-			endCol = d.Subject.End.Column - 1
-		}
-		file := hclPath
-		if d.Subject != nil && d.Subject.Filename != "" {
-			file = d.Subject.Filename
-		} else {
-			if !filepath.IsAbs(file) {
-				if ab, err := filepath.Abs(file); err == nil {
-					file = ab
-				}
-			}
-		}
-
-		msg := d.Summary
-		if d.Detail != "" {
-			if msg != "" {
-				msg = msg + ": " + d.Detail
-			} else {
-				msg = d.Detail
-			}
-		}
-
-		out = append(out, OutDiagnostic{
-			File:      file,
-			StartLine: startLine,
-			StartCol:  startCol,
-			EndLine:   endLine,
-			EndCol:    endCol,
-			Severity:  diagSeverity(d),
-			Message:   msg,
-		})
+	switch args[0] {
+	case "validate":
+		os.Exit(runValidate(args[1:]))
+	case "fmt":
+		os.Exit(runFmt(args[1:]))
+	case "infer":
+		os.Exit(runInfer(args[1:]))
+	case "docs":
+		os.Exit(runDocs(args[1:]))
+	case "bundle":
+		os.Exit(runBundle(args[1:]))
+	case "lsp":
+		os.Exit(runLSP(args[1:]))
+	case "version", "--version", "-version":
+		fmt.Println("hclschema", Version)
+		os.Exit(exitOK)
+	case "help", "-h", "--help":
+		fmt.Print(usage)
+		os.Exit(exitOK)
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(out); err != nil {
-		fmt.Fprintln(os.Stderr, "failed to emit json:", err)
-		os.Exit(2)
-	}
+	// Anything else is the pre-subcommand invocation the editor extension uses.
+	os.Exit(runLegacy(args))
+}
+
+func fail(format string, a ...any) int {
+	fmt.Fprintf(os.Stderr, "hclschema: "+format+"\n", a...)
+	return exitUsage
 }

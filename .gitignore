@@ -179,3 +179,12 @@ vite.config.ts.timestamp-*
 /vsx/node_modules/
 /vsx/.vscode-test/
 vsx/hcl-schema-*.vsix
+
+# Documentation website
+/website/node_modules/
+/website/build/
+/website/.docusaurus/
+/website/.cache-loader/
+
+# Packaged extensions
+/vsx/dist/

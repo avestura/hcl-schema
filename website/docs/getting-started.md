@@ -8,7 +8,22 @@ sidebar_position: 2
 
 ## Install
 
+### VS Code (recommended)
+
+**[Install from the Marketplace →](https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema)**
+
+```bash
+code --install-extension avestura.hcl-schema
+```
+
+This is the shortest path to something useful: the extension bundles the binary
+for your platform, so there is nothing else to install, and you get diagnostics,
+completion and hover immediately. See [Editors](./editors.md) for Neovim, Helix
+and other LSP clients.
+
 ### Go
+
+For CI, scripting, or if you would rather not use an editor integration:
 
 ```bash
 go install github.com/avestura/hcl-schema/cmd/hclschema-cli@latest
@@ -16,13 +31,6 @@ go install github.com/avestura/hcl-schema/cmd/hclschema-cli@latest
 
 The binary is named `hclschema-cli`. The rest of these docs call it
 `hclschema`; rename it or add an alias if you want the shorter name.
-
-### VS Code
-
-Install
-[avestura.hcl-schema](https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema)
-from the marketplace. It bundles the binary for your platform, so there is
-nothing else to install.
 
 ### From source
 

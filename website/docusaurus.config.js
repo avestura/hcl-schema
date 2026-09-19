@@ -3,6 +3,8 @@ const { themes } = require('prism-react-renderer');
 
 const organizationName = 'avestura';
 const projectName = 'hcl-schema';
+const marketplaceUrl =
+  'https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -66,8 +68,15 @@ const config = {
         items: [
           { to: '/', label: 'Docs', position: 'left', activeBaseRegex: '^/hcl-schema/$' },
           { to: '/schema-language/attributes', label: 'Schema language', position: 'left' },
+          { to: '/editors', label: 'VS Code', position: 'left' },
           { to: '/cli', label: 'CLI', position: 'left' },
           { to: '/go-library', label: 'Go API', position: 'left' },
+          {
+            href: marketplaceUrl,
+            label: 'Install for VS Code',
+            position: 'right',
+            className: 'navbar-install-link',
+          },
           {
             href: `https://github.com/${organizationName}/${projectName}`,
             label: 'GitHub',
@@ -89,19 +98,18 @@ const config = {
           {
             title: 'Tools',
             items: [
+              { label: 'VS Code extension', href: marketplaceUrl },
+              { label: 'Editor setup', to: '/editors' },
               { label: 'CLI', to: '/cli' },
               { label: 'Go library', to: '/go-library' },
-              { label: 'Editors', to: '/editors' },
             ],
           },
           {
             title: 'More',
             items: [
               { label: 'GitHub', href: `https://github.com/${organizationName}/${projectName}` },
-              {
-                label: 'VS Code extension',
-                href: 'https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema',
-              },
+              { label: 'Security model', to: '/security' },
+              { label: 'CI recipes', to: '/ci' },
             ],
           },
         ],

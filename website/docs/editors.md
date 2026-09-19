@@ -8,10 +8,32 @@ sidebar_position: 6
 
 ## VS Code
 
-Install
-[avestura.hcl-schema](https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema).
+**[Install from the Marketplace →](https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema)**
+
+Or from inside the editor: open **Extensions** (`Ctrl+Shift+X` /
+`Cmd+Shift+X`), search for **HCL Schema**, and pick the one published by
+*avestura*. From a terminal:
+
+```bash
+code --install-extension avestura.hcl-schema
+```
+
 The binary for your platform ships with the extension, so there is nothing else
-to install.
+to install — no Go toolchain, no `PATH` setup. Packages are published per
+platform (Windows, macOS, Linux and Alpine, on x64 and arm64, plus 32-bit ARM),
+so the download is around 4 MB rather than carrying every platform's binary.
+
+Point a file at a schema and it starts working:
+
+```hcl
+__schema = "./service.schema.hcl"
+
+name = "checkout"
+```
+
+![The extension reporting a schema violation in VS Code](../static/img/vscode-screenshot.png)
+
+### Settings
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -20,8 +42,23 @@ to install.
 | `hclSchema.offline` | `false` | Never fetch remote schemas |
 | `hclSchema.cacheDir` | `""` | Where cached remote schemas live |
 
-Commands: **HCL Schema: Restart language server**, **Show output**, and
-**Validate active file**.
+### Commands
+
+Run these from the command palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
+
+- **HCL Schema: Validate active file**
+- **HCL Schema: Restart language server**
+- **HCL Schema: Show output** — the server's log, for when something looks wrong
+
+### Troubleshooting
+
+If nothing happens on an HCL file, check in this order:
+
+1. The file has a `__schema` attribute, and the path it names resolves.
+2. **Show output** reports the server starting rather than an error.
+3. If you set `hclSchema.cliPath`, the binary there is version 0.1.0 or later —
+   an older one has no `lsp` subcommand. Clear the setting to fall back to the
+   bundled binary.
 
 ## The language server
 

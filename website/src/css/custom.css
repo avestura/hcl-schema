@@ -29,3 +29,35 @@
 .markdown table td:first-child {
   white-space: nowrap;
 }
+
+/* The marketplace link in the navbar reads as a call to action rather than as
+   another page in the menu. */
+.navbar-install-link {
+  border: 1px solid var(--ifm-color-primary);
+  border-radius: var(--ifm-global-radius);
+  padding: 0.25rem 0.75rem;
+  font-weight: 600;
+}
+
+.navbar-install-link:hover {
+  background: var(--ifm-color-primary);
+  color: var(--ifm-background-color);
+  text-decoration: none;
+}
+
+@media (max-width: 996px) {
+  /* The sidebar menu gives every item full width, where a bordered pill looks
+     like a stray button. */
+  .navbar-sidebar .navbar-install-link {
+    border: none;
+    padding: inherit;
+  }
+}
+
+/* Side-by-side call to action under the editor screenshot. */
+.install-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.5rem 0 2rem;
+}

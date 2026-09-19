@@ -8,6 +8,16 @@ slug: /
 
 # HCL Schema
 
+:::tip Get it in your editor first
+
+**[Install the VS Code extension →](https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema)**
+
+Diagnostics as you type, completion of whatever the schema declares, hover
+documentation and go-to-definition. The binary ships with it, so there is
+nothing else to install. See [Editors](./editors.md).
+
+:::
+
 HCL has no equivalent of JSON Schema. If your tool reads HCL, the shape of that
 file lives in your Go code, and the people writing the file find out what it
 should contain by reading your source or by guessing.
@@ -68,6 +78,24 @@ $ hclschema validate .
 | **Documentation** | `hclschema docs` turns the `description` fields into a Markdown reference. |
 | **Editors** | A language server gives diagnostics on the unsaved buffer, completion, hover and go-to-definition. |
 | **CI** | Proper exit codes plus `github` and `sarif` output. |
+
+## In the editor
+
+Everything a schema declares — types, bounds, `enum` values, `description` text
+— reaches the person writing the file, as they write it.
+
+![The extension reporting a schema violation in VS Code](../static/img/vscode-screenshot.png)
+
+<div className="install-cta">
+  <a
+    className="button button--primary button--lg"
+    href="https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema">
+    Install for VS Code
+  </a>
+  <a className="button button--secondary button--lg" href="/hcl-schema/editors">
+    Neovim, Helix and others
+  </a>
+</div>
 
 ## The design in one table
 

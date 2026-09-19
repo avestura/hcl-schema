@@ -1,6 +1,6 @@
 # HCL Schema
 
-Describe the shape of an HCL file — in HCL — and check files against it.
+Describe the shape of an HCL file using HCL and check files against it.
 
 This repository contains:
 

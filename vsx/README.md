@@ -1,57 +1,56 @@
-# HCL Schema
+# HCL Schema for VS Code
 
-Create HCL Schemas using HCL files
+Validation, completion and hover for HCL files described by a `*.schema.hcl`
+schema.
 
-## Root Schema
+Documentation: <https://avestura.github.io/hcl-schema/>
 
-The [root HCL schema ](./schema/draft/2025-10/.schema.hcl) defines the schema itself (its own body).
+## What it does
 
-## Defining Schemas
-
-You can define an schema by creating a `*.schema.hcl`:
-
-**example.schema.hcl**:
+Add a `__schema` attribute to an HCL file:
 
 ```hcl
-__schema = "https://raw.githubusercontent.com/avestura/hcl-schema/refs/heads/main/schema/draft/2025-10/.schema.hcl"
-__id     = "https://raw.githubusercontent.com/avestura/hcl-schema/refs/heads/main/example.schema.hcl"
+__schema = "./service.schema.hcl"
 
-body {
-    attribute "myattr" {
-        required = true
-    }
+name = "checkout"
 
-    block_header "tag" {
-        label_names = ["name1"]
-
-        body { 
-            attribute "x" {}
-        }
-    }
+listener "https" {
+  port = 443
 }
 ```
-Which parses and accepts HCL files like this:
 
-```hcl
-// Defines an HCL file like this:
+and the extension gives you, against that schema:
 
-myattr = "x"
-tag "name" {
-    x = 2
-}
-tag "name2" {}
-```
+- **Diagnostics** as you type, on the unsaved buffer
+- **Completion** of declared attributes and blocks, and of an attribute's
+  permitted values
+- **Hover** documentation written once in the schema's `description`
+- **Go to definition** from a use to its declaration in the schema
+- A **document outline**
 
-## Schema Definition
+![Screenshot](assets/screenshot/vscode-scrshot.png)
 
-- `block_header` is equivalent of `hcl.BlockHeaderSchema`
-- `attribute` is equivalent of `hcl.AttributeSchema`
-- `body` is equvalent of `hcl.BodySchema`
+## Settings
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `hclSchema.cliPath` | `""` | Path to the `hclschema` binary. Empty uses the bundled one. |
+| `hclSchema.strict` | `false` | Apply draft 2026-09 rules to schemas that pin an older draft |
+| `hclSchema.offline` | `false` | Never fetch remote schemas; use the cache only |
+| `hclSchema.cacheDir` | `""` | Where cached remote schemas live |
+
+## Commands
+
+- **HCL Schema: Validate active file**
+- **HCL Schema: Restart language server**
+- **HCL Schema: Show output**
 
 ## Requirements
 
-This extension depends on the [HashiCorp's HCL Extension](https://marketplace.visualstudio.com/items?itemName=HashiCorp.HCL)
+None. The binary for your platform ships with the extension. The
+[HashiCorp HCL](https://marketplace.visualstudio.com/items?itemName=HashiCorp.HCL)
+extension is installed alongside it for syntax highlighting.
 
-## Extension Settings
+## License
 
-* `hclSchema.cliPath`: If you don't want to use the built-in cli for checking the schema file, you can configure the binary path.
+MIT.

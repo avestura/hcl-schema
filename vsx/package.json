@@ -2,13 +2,15 @@
   "name": "hcl-schema",
   "publisher": "avestura",
   "displayName": "HCL Schema",
-  "description": "Support for .schema.hcl files",
+  "description": "Validation, completion and hover for HCL files described by .schema.hcl",
   "icon": "assets/hashicorp_logo_mark_light_universal_radius45.png",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.106.1"
   },
   "categories": [
+    "Programming Languages",
+    "Linters",
     "Other"
   ],
   "keywords": [
@@ -33,18 +35,25 @@
     "hashicorp.hcl"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onLanguage:hcl"
+    "onLanguage:hcl",
+    "workspaceContains:**/*.schema.hcl"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "hcl-schema.validateActive",
-        "title": "Validate active HCL file"
+        "title": "HCL Schema: Validate active file"
+      },
+      {
+        "command": "hcl-schema.restart",
+        "title": "HCL Schema: Restart language server"
+      },
+      {
+        "command": "hcl-schema.showOutput",
+        "title": "HCL Schema: Show output"
       }
-    ]
-    ,
+    ],
     "configuration": {
       "type": "object",
       "title": "HCL Schema",
@@ -52,7 +61,22 @@
         "hclSchema.cliPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the hclschema CLI binary. If empty the extension will use `go run ./cmd/hclschema-cli` in development."
+          "description": "Path to the hclschema binary. Leave empty to use the one bundled with this extension."
+        },
+        "hclSchema.strict": {
+          "type": "boolean",
+          "default": false,
+          "description": "Apply draft 2026-09 rules even to schemas that pin an older draft."
+        },
+        "hclSchema.offline": {
+          "type": "boolean",
+          "default": false,
+          "description": "Never fetch remote schemas; serve them from the local cache only."
+        },
+        "hclSchema.cacheDir": {
+          "type": "string",
+          "default": "",
+          "description": "Directory for cached remote schemas. Leave empty for the per-user cache directory."
         }
       }
     }
@@ -66,7 +90,11 @@
     "pretest": "yarn run compile && yarn run lint",
     "lint": "eslint src",
     "test": "vscode-test",
-    "package": "vsce package"
+    "package": "node ./scripts/package.js",
+    "package:all": "node ./scripts/package.js --all"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
     "@types/vscode": "^1.106.1",

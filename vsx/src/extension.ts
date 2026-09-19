@@ -1,138 +1,159 @@
 import * as vscode from 'vscode';
-import { execFile } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import {
+	LanguageClient,
+	LanguageClientOptions,
+	ServerOptions,
+	TransportKind,
+	RevealOutputChannelOn,
+} from 'vscode-languageclient/node';
 
-interface OutDiagnostic {
-	file: string;
-	startLine: number;
-	startCol: number;
-	endLine: number;
-	endCol: number;
-	severity: 'error' | 'warning' | 'info';
-	message: string;
-}
+let client: LanguageClient | undefined;
+let output: vscode.OutputChannel;
 
-let diagnosticCollection: vscode.DiagnosticCollection;
-const debounceTimers = new Map<string, NodeJS.Timeout>();
-let bundledCliPath: string | null = null;
+/**
+ * Locates the bundled CLI for the running platform.
+ *
+ * Each published VSIX targets one platform, so `bin/` normally holds a single
+ * binary; the per-platform subdirectory is still checked so that a locally
+ * built multi-target tree keeps working.
+ */
+function findBundledCli(extensionPath: string): string | undefined {
+	const binDir = path.join(extensionPath, 'bin');
+	const goos = process.platform === 'win32' ? 'windows' : process.platform;
+	const goarch = process.arch === 'x64' ? 'amd64' : process.arch;
+	const binName = goos === 'windows' ? 'hclschema-cli.exe' : 'hclschema-cli';
 
-function toVSCodeSeverity(s: string): vscode.DiagnosticSeverity {
-	switch (s) {
-		case 'error':
-			return vscode.DiagnosticSeverity.Error;
-		case 'warning':
-			return vscode.DiagnosticSeverity.Warning;
-		default:
-			return vscode.DiagnosticSeverity.Information;
+	for (const candidate of [
+		path.join(binDir, `${goos}-${goarch}`, binName),
+		path.join(binDir, binName),
+	]) {
+		try {
+			if (fs.existsSync(candidate)) {
+				return candidate;
+			}
+		} catch {
+			// Ignore and try the next candidate.
+		}
 	}
+	return undefined;
 }
 
-function runValidatorOnFile(hclPath: string): Promise<OutDiagnostic[]> {
-	return new Promise((resolve, reject) => {
-			const config = vscode.workspace.getConfiguration('hclSchema');
-			const cliPath = config.get<string>('cliPath') || '';
-
-			let cmd: string;
-			let args: string[];
-			if (cliPath && cliPath.length > 0) {
-				cmd = cliPath;
-				args = ['--detect', hclPath];
-			} else if (bundledCliPath) {
-				cmd = bundledCliPath;
-				args = ['--detect', hclPath];
-			} else {
-				// Do not attempt to run `go run` from the extension for security reasons.
-				const msg = 'hcl-schema: no bundled CLI found and `hclSchema.cliPath` is not configured. Install the bundled binary or set `hclSchema.cliPath` in settings.';
-				vscode.window.showErrorMessage(msg);
-				return reject(new Error(msg));
-			}
-
-			execFile(cmd, args, { cwd: path.resolve(__dirname, '..', '..') }, (err, stdout, stderr) => {
-			if (err) {
-				return reject(new Error(stderr || err.message));
-			}
-			try {
-				const parsed = JSON.parse(stdout) as OutDiagnostic[];
-				resolve(parsed);
-			} catch (e) {
-				return reject(new Error('failed to parse validator output: ' + e));
-			}
-		});
-	});
+function resolveCli(context: vscode.ExtensionContext): string | undefined {
+	const configured = vscode.workspace.getConfiguration('hclSchema').get<string>('cliPath');
+	if (configured && configured.length > 0) {
+		return configured;
+	}
+	return findBundledCli(context.extensionPath);
 }
 
-function scheduleValidate(document: vscode.TextDocument) {
-	if (document.languageId !== 'hcl' && !document.fileName.endsWith('.hcl')) {
+function serverArguments(): string[] {
+	const config = vscode.workspace.getConfiguration('hclSchema');
+	const args = ['lsp'];
+	if (config.get<boolean>('strict')) {
+		args.push('--strict');
+	}
+	if (config.get<boolean>('offline')) {
+		args.push('--offline');
+	}
+	const cacheDir = config.get<string>('cacheDir');
+	if (cacheDir && cacheDir.length > 0) {
+		args.push('--cache-dir', cacheDir);
+	}
+	return args;
+}
+
+async function startClient(context: vscode.ExtensionContext): Promise<void> {
+	const command = resolveCli(context);
+	if (!command) {
+		vscode.window.showErrorMessage(
+			'hcl-schema: no bundled hclschema CLI was found and `hclSchema.cliPath` is not set.',
+		);
 		return;
 	}
-	const key = document.uri.toString();
-	if (debounceTimers.has(key)) {
-		clearTimeout(debounceTimers.get(key)!);
+
+	const serverOptions: ServerOptions = {
+		command,
+		args: serverArguments(),
+		transport: TransportKind.stdio,
+	};
+
+	const clientOptions: LanguageClientOptions = {
+		documentSelector: [
+			{ scheme: 'file', language: 'hcl' },
+			{ scheme: 'file', pattern: '**/*.hcl' },
+			{ scheme: 'file', pattern: '**/*.hcl.json' },
+		],
+		outputChannel: output,
+		// A schema parse failure is reported as a diagnostic, so there is no
+		// reason to steal focus with the output panel.
+		revealOutputChannelOn: RevealOutputChannelOn.Never,
+		synchronize: {
+			fileEvents: vscode.workspace.createFileSystemWatcher('**/*.schema.hcl'),
+		},
+	};
+
+	client = new LanguageClient('hclSchema', 'HCL Schema', serverOptions, clientOptions);
+	await client.start();
+}
+
+async function stopClient(): Promise<void> {
+	if (!client) {
+		return;
 	}
-	const timer = setTimeout(async () => {
-		debounceTimers.delete(key);
-		try {
-			const out = await runValidatorOnFile(document.fileName);
-			const diagnostics: vscode.Diagnostic[] = [];
-			for (const d of out) {
-				const range = new vscode.Range(d.startLine, d.startCol, d.endLine, d.endCol);
-				const diag = new vscode.Diagnostic(range, d.message, toVSCodeSeverity(d.severity));
-				diagnostics.push(diag);
+	const stopping = client;
+	client = undefined;
+	await stopping.stop();
+}
+
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	output = vscode.window.createOutputChannel('HCL Schema');
+	context.subscriptions.push(output);
+
+	await startClient(context);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('hcl-schema.restart', async () => {
+			await stopClient();
+			await startClient(context);
+			vscode.window.showInformationMessage('HCL Schema: language server restarted');
+		}),
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('hcl-schema.showOutput', () => output.show()),
+	);
+
+	// Validation is continuous now that the server holds the buffer, so the old
+	// command only needs to make sure the server is running.
+	context.subscriptions.push(
+		vscode.commands.registerCommand('hcl-schema.validateActive', async () => {
+			if (!vscode.window.activeTextEditor) {
+				vscode.window.showInformationMessage('No active editor');
+				return;
 			}
-			diagnosticCollection.set(document.uri, diagnostics);
-		} catch (e: any) {
-			console.error('hcl-schema validator error:', e);
-			const diag = new vscode.Diagnostic(new vscode.Range(0, 0, 0, 1), String(e.message || e), vscode.DiagnosticSeverity.Error);
-			diagnosticCollection.set(document.uri, [diag]);
-		}
-	}, 250);
-	debounceTimers.set(key, timer);
+			if (!client) {
+				await startClient(context);
+			}
+		}),
+	);
+
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration(async (e) => {
+			if (
+				e.affectsConfiguration('hclSchema.cliPath') ||
+				e.affectsConfiguration('hclSchema.strict') ||
+				e.affectsConfiguration('hclSchema.offline') ||
+				e.affectsConfiguration('hclSchema.cacheDir')
+			) {
+				await stopClient();
+				await startClient(context);
+			}
+		}),
+	);
 }
 
-export function activate(context: vscode.ExtensionContext) {
-	console.log('hcl-schema extension active');
-
-	diagnosticCollection = vscode.languages.createDiagnosticCollection('hcl-schema');
-	context.subscriptions.push(diagnosticCollection);
-
-	try {
-		const binDir = path.join(context.extensionPath, 'bin');
-		const goos = process.platform === 'win32' ? 'windows' : process.platform;
-		const goarch = process.arch === 'x64' ? 'amd64' : process.arch;
-		const binName = goos === 'windows' ? 'hclschema-cli.exe' : 'hclschema-cli';
-		const platformCandidate = path.join(binDir, `${goos}-${goarch}`, binName);
-		const topCandidate = path.join(binDir, binName);
-		if (fs.existsSync(platformCandidate)) {
-			bundledCliPath = platformCandidate;
-		} else if (fs.existsSync(topCandidate)) {
-			bundledCliPath = topCandidate;
-		} else {
-			bundledCliPath = null;
-		}
-	} catch (e) {
-		bundledCliPath = null;
-	}
-
-	for (const doc of vscode.workspace.textDocuments) {
-		scheduleValidate(doc);
-	}
-
-	context.subscriptions.push(vscode.workspace.onDidOpenTextDocument((doc) => scheduleValidate(doc)));
-	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((doc) => scheduleValidate(doc)));
-	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => scheduleValidate(e.document)));
-
-	context.subscriptions.push(vscode.commands.registerCommand('hcl-schema.validateActive', async () => {
-		const editor = vscode.window.activeTextEditor;
-		if (!editor) {
-			vscode.window.showInformationMessage('No active editor');
-			return;
-		}
-		scheduleValidate(editor.document);
-		vscode.window.showInformationMessage('Validation scheduled');
-	}));
-}
-
-export function deactivate() {
-	diagnosticCollection && diagnosticCollection.clear();
+export async function deactivate(): Promise<void> {
+	await stopClient();
 }

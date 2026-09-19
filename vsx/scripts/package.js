@@ -13,8 +13,16 @@ const TARGETS = [
   { vscode: 'win32-arm64', goos: 'windows', goarch: 'arm64' },
   { vscode: 'linux-x64', goos: 'linux', goarch: 'amd64' },
   { vscode: 'linux-arm64', goos: 'linux', goarch: 'arm64' },
+  { vscode: 'linux-armhf', goos: 'linux', goarch: 'arm', goarm: '7' },
   { vscode: 'darwin-x64', goos: 'darwin', goarch: 'amd64' },
   { vscode: 'darwin-arm64', goos: 'darwin', goarch: 'arm64' },
+  // Alpine is musl rather than glibc. The binary is built with CGO disabled,
+  // so it is static and the same Linux build runs there — but VS Code treats
+  // alpine as its own target, and with per-platform publishing there is no
+  // universal package to fall back on. Leaving these out would mean Alpine
+  // devcontainers get no extension at all.
+  { vscode: 'alpine-x64', goos: 'linux', goarch: 'amd64' },
+  { vscode: 'alpine-arm64', goos: 'linux', goarch: 'arm64' },
 ];
 
 function run(cmd, args, opts) {
@@ -53,11 +61,15 @@ function main() {
     fs.rmSync(binDir, { recursive: true, force: true });
     fs.mkdirSync(binDir, { recursive: true });
 
-    run('node', [
+    const buildArgs = [
       path.join('scripts', 'build-go-cli.js'),
       '--goos', target.goos,
       '--goarch', target.goarch,
-    ], { cwd: root });
+    ];
+    if (target.goarm) {
+      buildArgs.push('--goarm', target.goarm);
+    }
+    run('node', buildArgs, { cwd: root });
 
     const out = path.join('dist', `hcl-schema-${pkg.version}-${target.vscode}.vsix`);
     run('npx', ['--yes', '@vscode/vsce', 'package', '--target', target.vscode, '-o', out], { cwd: root });

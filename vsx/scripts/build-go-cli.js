@@ -51,11 +51,16 @@ function version() {
 
 function build(target, outPath) {
   const cmdPath = path.join('..', 'cmd', 'hclschema-cli');
+  // CGO is off, so the binary is static. That is what lets one Linux build
+  // serve both glibc and musl distributions.
   const env = Object.assign({}, process.env, {
     GOOS: target.goos,
     GOARCH: target.goarch,
     CGO_ENABLED: '0',
   });
+  if (target.goarm) {
+    env.GOARM = target.goarm;
+  }
   run('go', [
     'build',
     '-trimpath',
@@ -72,7 +77,7 @@ function main() {
   ensureDir(binDir);
 
   if (args.goos || args.goarch) {
-    const target = { goos: args.goos, goarch: args.goarch };
+    const target = { goos: args.goos, goarch: args.goarch, goarm: args.goarm };
     if (!target.goos || !target.goarch) {
       throw new Error('--goos and --goarch must be given together');
     }

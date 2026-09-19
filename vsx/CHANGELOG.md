@@ -25,7 +25,8 @@ than a wrapper that shells out to the CLI on every keystroke.
 ### Changed
 
 - The VSIX is published per platform, so a download carries one binary instead
-  of all six. It is roughly a fifth of the previous size.
+  of all six: under 4 MB, down from 38 MB. Alpine and 32-bit ARM are covered
+  too, since per-platform publishing has no universal package to fall back on.
 - Activation waits for an HCL file or a workspace containing a `*.schema.hcl`
   rather than firing on startup.
 

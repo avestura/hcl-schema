@@ -108,6 +108,32 @@ jobs:
       - run: yarn run lint
         working-directory: vsx
 
+      # A per-platform VSIX must carry exactly one binary. vsce runs
+      # `vscode:prepublish` itself, so a hook that builds every target would
+      # silently put all of them back into each package.
+      - name: Package and check the contents
+        working-directory: vsx
+        run: |
+          yarn run package
+          vsix="$(ls dist/*.vsix)"
+          echo "checking $vsix"
+          list="${RUNNER_TEMP:-/tmp}/bundled-binaries.txt"
+          unzip -Z1 "$vsix" 'extension/bin/*' > "$list" || true
+          cat "$list"
+          count="$(grep -c . "$list" || true)"
+          if [ "$count" != "1" ]; then
+            echo "expected exactly 1 bundled binary, found $count"
+            exit 1
+          fi
+          size="$(stat -c%s "$vsix")"
+          echo "size: $size bytes"
+          # Comfortably above one binary plus the language client, and far
+          # below the ~38 MB a package carrying every platform would reach.
+          if [ "$size" -gt 12000000 ]; then
+            echo "package is larger than expected; is something extra bundled?"
+            exit 1
+          fi
+
   website:
     name: Website builds
     runs-on: ubuntu-latest

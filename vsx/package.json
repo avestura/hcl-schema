@@ -83,7 +83,7 @@
   },
   "license": "MIT",
   "scripts": {
-    "vscode:prepublish": "yarn run build:go-cli && yarn run compile",
+    "vscode:prepublish": "node ./scripts/prepublish.js",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "build:go-cli": "node ./scripts/build-go-cli.js",

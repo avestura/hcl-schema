@@ -17,3 +17,7 @@ node_modules/.bin/**
 node_modules/**/test/**
 node_modules/**/*.md
 node_modules/**/*.map
+
+# Only the flat bin/<binary> ships. A per-platform VSIX must carry exactly one
+# binary, and a local multi-target build tree would otherwise leak into it.
+bin/*/**

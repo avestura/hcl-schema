@@ -34,6 +34,15 @@ function run(cmd, args, opts) {
   }
 }
 
+// vsce resolves to the pinned local install.
+function vsce(root) {
+  const bin = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'vsce.cmd' : 'vsce');
+  if (!fs.existsSync(bin)) {
+    throw new Error('@vscode/vsce is not installed. Run `yarn install` in vsx/ first.');
+  }
+  return bin;
+}
+
 function hostVSCodeTarget() {
   const goos = process.platform === 'win32' ? 'win32' : process.platform;
   const arch = process.arch === 'x64' ? 'x64' : process.arch;
@@ -72,7 +81,9 @@ function main() {
     run('node', buildArgs, { cwd: root });
 
     const out = path.join('dist', `hcl-schema-${pkg.version}-${target.vscode}.vsix`);
-    run('npx', ['--yes', '@vscode/vsce', 'package', '--target', target.vscode, '-o', out], { cwd: root });
+    // The pinned devDependency rather than npx, so a release always packages
+    // with the vsce version recorded in yarn.lock.
+    run(vsce(root), ['package', '--target', target.vscode, '-o', out], { cwd: root });
     console.log(`packaged ${out}`);
   }
 }

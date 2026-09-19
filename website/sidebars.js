@@ -21,6 +21,7 @@ const sidebars = {
     'go-library',
     'editors',
     'ci',
+    'releasing',
     'security',
     'reference/meta-schema',
   ],

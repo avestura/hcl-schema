@@ -1,0 +1,244 @@
+name: Release extension
+
+on:
+  push:
+    tags:
+      # v1.2.3 publishes a stable release; v1.2.3-pre publishes 1.2.3 as a
+      # pre-release. The version itself always comes from vsx/package.json,
+      # which the verify job checks against the tag.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-pre'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release, e.g. v1.2.3'
+        required: true
+        type: string
+      dry_run:
+        description: 'Build and check everything, publish nothing'
+        required: false
+        default: true
+        type: boolean
+
+# A second run for the same tag would try to publish a version that already
+# exists, so let the first finish rather than cancelling it mid-publish.
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+      dry_run: ${{ steps.resolve.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: vsx/yarn.lock
+
+      - name: Resolve the tag
+        id: resolve
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The marketplace takes the version from package.json, so a tag that
+      # disagrees with it would publish something other than what the tag says.
+      - name: Check the tag against vsx/package.json
+        id: check
+        run: node scripts/check-version.js "${{ steps.resolve.outputs.tag }}"
+        working-directory: vsx
+
+      # A broken release cannot be unpublished and reused under the same
+      # version, so the full suite runs before anything is built.
+      - run: go test ./...
+      - run: yarn install --frozen-lockfile
+        working-directory: vsx
+      - run: yarn run compile
+        working-directory: vsx
+      - run: yarn run lint
+        working-directory: vsx
+
+  package:
+    name: Package
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: vsx/yarn.lock
+
+      - run: yarn install --frozen-lockfile
+        working-directory: vsx
+
+      - name: Build every platform package
+        run: yarn run package:all
+        working-directory: vsx
+
+      # vsce runs `vscode:prepublish` itself, so a hook that rebuilt every
+      # target would put all of them into each package. Check rather than trust.
+      - name: Check each package carries exactly one binary
+        working-directory: vsx
+        run: |
+          fail=0
+          for vsix in dist/*.vsix; do
+            list="${RUNNER_TEMP}/$(basename "$vsix").txt"
+            unzip -Z1 "$vsix" 'extension/bin/*' > "$list" || true
+            count="$(grep -c . "$list" || true)"
+            size="$(stat -c%s "$vsix")"
+            printf '%-46s %2s binary  %8s bytes\n' "$(basename "$vsix")" "$count" "$size"
+            if [ "$count" != "1" ]; then
+              echo "  ERROR: expected exactly 1 bundled binary"
+              fail=1
+            fi
+            if [ "$size" -gt 12000000 ]; then
+              echo "  ERROR: package is larger than expected"
+              fail=1
+            fi
+          done
+          [ "$fail" = "0" ]
+
+      - name: Check the built packages carry the tagged version
+        working-directory: vsx
+        run: |
+          expected="hcl-schema-${{ needs.verify.outputs.version }}-"
+          for vsix in dist/*.vsix; do
+            case "$(basename "$vsix")" in
+              "$expected"*) ;;
+              *) echo "unexpected package $vsix, wanted ${expected}<target>.vsix"; exit 1 ;;
+            esac
+          done
+          echo "all packages are version ${{ needs.verify.outputs.version }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: vsx/dist/*.vsix
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish to the Marketplace
+    needs: [verify, package]
+    if: needs.verify.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    environment: marketplace
+    permissions:
+      contents: read
+      # Required for trusted publishing: vsce asks GitHub for an OIDC token
+      # and exchanges it with the marketplace. Harmless when publishing by PAT.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: vsx/yarn.lock
+
+      - run: yarn install --frozen-lockfile
+        working-directory: vsx
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+          path: vsx/dist
+
+      # Publishing every target in one call keeps the marketplace from briefly
+      # offering some platforms and not others.
+      #
+      # Auth: a VSCE_PAT secret is used when present, otherwise OIDC trusted
+      # publishing. Personal Access Tokens stop working on 1 December 2026, so
+      # deleting the secret is the whole migration once the publisher is set up
+      # for trusted publishing.
+      - name: Publish
+        working-directory: vsx
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          args=(publish --packagePath dist/*.vsix --skip-duplicate)
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--pre-release)
+          fi
+
+          if [ -n "$VSCE_PAT" ]; then
+            echo "Authenticating with a Personal Access Token."
+            echo "::warning::Personal Access Tokens stop working on 2026-12-01. Move to OIDC trusted publishing and delete the VSCE_PAT secret."
+          else
+            echo "Authenticating with OIDC trusted publishing."
+            args+=(--oidc)
+          fi
+
+          ./node_modules/.bin/vsce "${args[@]}"
+
+  release:
+    name: GitHub release
+    needs: [verify, package, publish]
+    if: needs.verify.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+          path: dist
+
+      # The packages are attached so that anyone on a platform the marketplace
+      # does not serve, or behind a proxy that blocks it, can install by hand.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.verify.outputs.tag }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          notes="$(mktemp)"
+          {
+            echo "Published to the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=avestura.hcl-schema)."
+            echo
+            echo '```bash'
+            echo "code --install-extension avestura.hcl-schema"
+            echo '```'
+            echo
+            echo "The attached packages are for installing by hand (\`code --install-extension <file>.vsix\`)."
+            echo
+            if [ -f vsx/CHANGELOG.md ]; then
+              echo "See [the changelog](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/vsx/CHANGELOG.md)."
+            fi
+          } > "$notes"
+
+          flags=(--title "$TAG" --notes-file "$notes")
+          if [ "$PRERELEASE" = "true" ]; then
+            flags+=(--prerelease)
+          fi
+
+          gh release create "$TAG" dist/*.vsix "${flags[@]}"

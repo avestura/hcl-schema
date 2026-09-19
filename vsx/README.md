@@ -54,3 +54,19 @@ extension is installed alongside it for syntax highlighting.
 ## License
 
 MIT.
+
+## Releasing
+
+Pushing a version tag publishes to the Marketplace and attaches the packages to
+a GitHub release:
+
+```bash
+$EDITOR package.json CHANGELOG.md   # bump the version, write the entry
+git commit -am "chore(vsx): 0.2.0"
+git tag v0.2.0 && git push origin main --tags
+```
+
+`.github/workflows/release.yml` verifies the tag against `package.json`, runs
+the tests, builds all nine platform packages, checks each carries exactly one
+binary, then publishes. Full details, including trusted-publishing setup, are
+in [Releasing the extension](https://avestura.github.io/hcl-schema/releasing).

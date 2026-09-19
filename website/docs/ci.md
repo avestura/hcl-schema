@@ -82,6 +82,11 @@ hclschema-cli validate .   # fails loudly if the digest no longer matches
 
 Compute a digest with `sha256sum`, or with `hclschema.Sum` in Go.
 
+## Releasing
+
+Publishing the VS Code extension is driven by version tags and documented
+separately: see [Releasing the extension](./releasing.md).
+
 ## Keeping schemas formatted
 
 ```yaml

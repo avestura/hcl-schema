@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Check formatting
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l ./cmd ./internal ./pkg)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - run: go vet ./...
+
+      # -race needs cgo and therefore a C toolchain. It is available on the
+      # Linux and macOS runners; Windows runs the same tests without it.
+      - name: Test
+        if: runner.os != 'Windows'
+        run: go test -race ./...
+
+      - name: Test
+        if: runner.os == 'Windows'
+        run: go test ./...
+
+  self-check:
+    name: Validate this repository's own schemas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - run: go build -o hclschema ./cmd/hclschema-cli
+
+      # The meta-schemas and the example must validate, and the schema
+      # documents must already be in canonical form.
+      - run: ./hclschema validate --format github --offline schema example.schema.hcl
+      - run: ./hclschema fmt --check schema example.schema.hcl
+
+  reference-docs:
+    name: Generated reference is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Regenerate and diff
+        run: |
+          node website/scripts/gen-reference.js
+          if ! git diff --quiet -- website/docs/reference; then
+            echo "The generated reference is out of date. Run:"
+            echo "  node website/scripts/gen-reference.js"
+            git diff -- website/docs/reference
+            exit 1
+          fi
+
+  extension:
+    name: VS Code extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: vsx/yarn.lock
+
+      - run: yarn install --frozen-lockfile
+        working-directory: vsx
+      - run: yarn run compile
+        working-directory: vsx
+      - run: yarn run lint
+        working-directory: vsx
+
+  website:
+    name: Website builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: website/yarn.lock
+
+      - run: yarn install --frozen-lockfile
+        working-directory: website
+      - run: yarn run build
+        working-directory: website

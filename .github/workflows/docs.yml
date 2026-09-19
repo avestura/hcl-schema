@@ -1,0 +1,72 @@
+name: Deploy documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'schema/**'
+      - 'pkg/hclschema/docs.go'
+      - '.github/workflows/docs.yml'
+  # Lets you publish a doc fix without pushing to main.
+  workflow_dispatch:
+
+# GITHUB_TOKEN needs these to publish to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and let a newer one finish rather than cancelling
+# it mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: website/yarn.lock
+
+      - name: Install
+        run: yarn install --frozen-lockfile
+        working-directory: website
+
+      # The reference page is committed, but regenerating it here means a
+      # schema change reaches the site even if someone forgets.
+      - name: Regenerate the meta-schema reference
+        run: node website/scripts/gen-reference.js
+
+      - name: Build
+        run: yarn run build
+        working-directory: website
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/build
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
